@@ -275,7 +275,7 @@ mod integration_tests {
 
         let module = deserialize_file("./res/cases/v1/const.wasm").expect("Should be deserialized");
         let func = &module.code_section().expect("Code section to exist").bodies()[0];
-        assert_eq!(func.code().elements().len(), 16);
+        assert_eq!(func.code().elements().len(), 17);
 
         assert_eq!(I64Const(9223372036854775807), func.code().elements()[0]);
         assert_eq!(I64Const(-9223372036854775808), func.code().elements()[1]);
@@ -291,6 +291,7 @@ mod integration_tests {
         assert_eq!(I32Const(-8192), func.code().elements()[11]);
         assert_eq!(I32Const(-16384), func.code().elements()[12]);
         assert_eq!(I32Const(-32768), func.code().elements()[13]);
+        assert_eq!(I64Const(-1152894205662152753), func.code().elements()[14]);
     }
 
     #[test]
