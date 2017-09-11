@@ -38,12 +38,52 @@ pub struct VariableInstance<E: UserError> {
 	value: RwLock<VariableValue<E>>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct VariableDebugInstance {
+	/// Is mutable?
+	is_mutable: bool,
+	/// Variable type.
+	variable_type: VariableType,
+	/// Global value.
+	value: VariableDebugValue,
+}
+
+impl<'a, E: UserError> From<&'a VariableInstance<E>> for VariableDebugInstance {
+	fn from(instance: &'a VariableInstance<E>) -> Self {
+		VariableDebugInstance {
+			is_mutable: instance.is_mutable,
+			variable_type: instance.variable_type,
+			value: VariableDebugValue::from(&instance.value),
+		}
+	}
+}
+
+
 /// Enum variable value.
 enum VariableValue<E: UserError> {
 	/// Internal value.
 	Internal(RuntimeValue),
 	/// External value.
 	External(Box<ExternalVariableValue<E>>),
+}
+
+#[derive(Clone, PartialEq, Debug)]
+/// Enum variable value, frozen for debugging
+enum VariableDebugValue {
+	/// Internal value.
+	Internal(RuntimeValue),
+	/// External value, frozen.
+	External(RuntimeValue),
+}
+
+impl<'a, E: UserError> From<&'a RwLock<VariableValue<E>>> for VariableDebugValue {
+	fn from(variable: &'a RwLock<VariableValue<E>>) -> Self {
+		let val = variable.read();
+		match *val {
+			VariableValue::Internal(ref rv) => VariableDebugValue::Internal(rv.clone()),
+			VariableValue::External(ref ev) => VariableDebugValue::External(ev.get()),
+		}
+	}
 }
 
 impl<E> VariableInstance<E> where E: UserError {

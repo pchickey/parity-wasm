@@ -530,11 +530,11 @@ impl<E> ModuleInstanceInterface<E> for ModuleInstance<E> where E: UserError {
 		match self.imports.parse_memory_index(index) {
 			ItemIndex::IndexSpace(_) => unreachable!("parse_memory_index resolves IndexSpace option"),
 			ItemIndex::Internal(index) => self.memory.get(index as usize).cloned()
-				.ok_or(Error::Memory(format!("trying to access memory with local index {} when there are only {} memory regions", index, self.memory.len()))),
+				.ok_or(Error::Memory(format!("trying to access memory with local index {} when there are only {} memory regions", index, self.memory.len()), None)),
 			ItemIndex::External(index) => self.module.import_section()
-				.ok_or(Error::Memory(format!("trying to access external memory with index {} in module without import section", index)))
+				.ok_or(Error::Memory(format!("trying to access external memory with index {} in module without import section", index), None))
 				.and_then(|s| s.entries().get(index as usize)
-					.ok_or(Error::Memory(format!("trying to access external memory with index {} in module with {}-entries import section", index, s.entries().len()))))
+					.ok_or(Error::Memory(format!("trying to access external memory with index {} in module with {}-entries import section", index, s.entries().len()), None)))
 				.and_then(|e| self.imports.memory(None, e)),
 		}
 	}

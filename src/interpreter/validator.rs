@@ -43,7 +43,7 @@ pub enum StackValueType {
 }
 
 /// Control stack frame.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BlockFrame {
 	/// Frame type.
 	pub frame_type: BlockFrameType,

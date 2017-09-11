@@ -45,12 +45,12 @@ impl<E> MemoryInstance<E> where E: UserError {
 
 		let maximum_size = match memory_type.limits().maximum() {
 			Some(maximum_pages) if maximum_pages > LINEAR_MEMORY_MAX_PAGES =>
-				return Err(Error::Memory(format!("maximum memory size must be at most {} pages", LINEAR_MEMORY_MAX_PAGES))),
+				return Err(Error::Memory(format!("maximum memory size must be at most {} pages", LINEAR_MEMORY_MAX_PAGES), None)),
 			Some(maximum_pages) => maximum_pages.saturating_mul(LINEAR_MEMORY_PAGE_SIZE),
 			None => u32::MAX,
 		};
 		let initial_size = calculate_memory_size(0, memory_type.limits().initial(), maximum_size)
-			.ok_or(Error::Memory(format!("initial memory size must be at most {} pages", LINEAR_MEMORY_MAX_PAGES)))?;
+			.ok_or(Error::Memory(format!("initial memory size must be at most {} pages", LINEAR_MEMORY_MAX_PAGES), None))?;
 
 		let memory = MemoryInstance {
 			limits: memory_type.limits().clone(),
@@ -108,10 +108,10 @@ impl<E> MemoryInstance<E> where E: UserError {
 		where B: ::std::ops::Deref<Target=Vec<u8>>
 	{
 		let end = offset.checked_add(size)
-			.ok_or(Error::Memory(format!("trying to access memory block of size {} from offset {}", size, offset)))?;
+			.ok_or(Error::Memory(format!("trying to access memory block of size {} from offset {}", size, offset), None))?;
 
 		if end > buffer.len() {
-			return Err(Error::Memory(format!("trying to access region [{}..{}] in memory [0..{}]", offset, end, buffer.len())));
+			return Err(Error::Memory(format!("trying to access region [{}..{}] in memory [0..{}]", offset, end, buffer.len()), None));
 		}
 
 		Ok(CheckedRegion {

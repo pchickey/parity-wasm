@@ -14,7 +14,7 @@ use interpreter::value::{
 	ArithmeticOps, Integer, Float, LittleEndianConvert, TransmuteInto,
 };
 use interpreter::validator::{BlockFrame, BlockFrameType};
-use interpreter::variable::VariableInstance;
+use interpreter::variable::{VariableInstance, VariableDebugInstance};
 
 /// Index of default linear memory.
 pub const DEFAULT_MEMORY_INDEX: u32 = 0;
@@ -44,6 +44,37 @@ pub struct FunctionContext<'a, E: 'a + UserError> {
 	pub frame_stack: StackWithLimit<BlockFrame, E>,
 	/// Current instruction position.
 	pub position: usize,
+}
+
+/// Function execution context, without lifetimed parameters, for return in the
+/// Error<> type.
+#[derive(PartialEq, Clone, Debug)]
+pub struct FunctionDebugContext<E: UserError> {
+	/// Is context initialized.
+	pub is_initialized: bool,
+	/// Function return type.
+	pub return_type: BlockType,
+	/// Local variables.
+	pub locals: Vec<VariableDebugInstance>,
+	/// Values stack.
+	pub value_stack: StackWithLimit<RuntimeValue, E>,
+	/// Blocks frames stack.
+	pub frame_stack: StackWithLimit<BlockFrame, E>,
+	/// Current instruction position.
+	pub position: usize,
+}
+
+impl<'b, 'a, E: UserError> From<&'b FunctionContext<'a, E>> for FunctionDebugContext<E> {
+	fn from(context: &'b FunctionContext<'a, E>) -> Self {
+		FunctionDebugContext {
+			is_initialized: context.is_initialized,
+			return_type: context.return_type,
+			locals: context.locals.iter().map(|i| VariableDebugInstance::from(i)).collect(),
+			value_stack: context.value_stack.clone(),
+			frame_stack: context.frame_stack.clone(),
+			position: context.position,
+		}
+	}
 }
 
 /// Interpreter action to execute after executing instruction.
@@ -495,7 +526,7 @@ impl<E> Interpreter<E> where E: UserError {
 
 	fn run_load<'a, T>(context: &mut FunctionContext<E>, _align: u32, offset: u32) -> Result<InstructionOutcome<'a, E>, Error<E>>
 		where RuntimeValue: From<T>, T: LittleEndianConvert<E> {
-		let address = effective_address(offset, context.value_stack_mut().pop_as()?)?;
+		let address = effective_address(offset, context.value_stack_mut().pop_as()?, context)?;
 		context.module()
 			.memory(ItemIndex::IndexSpace(DEFAULT_MEMORY_INDEX))
 			.and_then(|m| m.get(address, mem::size_of::<T>()))
@@ -506,7 +537,7 @@ impl<E> Interpreter<E> where E: UserError {
 
 	fn run_load_extend<'a, T, U>(context: &mut FunctionContext<E>, _align: u32, offset: u32) -> Result<InstructionOutcome<'a, E>, Error<E>>
 		where T: ExtendInto<U>, RuntimeValue: From<U>, T: LittleEndianConvert<E> {
-		let address = effective_address(offset, context.value_stack_mut().pop_as()?)?;
+		let address = effective_address(offset, context.value_stack_mut().pop_as()?, context)?;
 		let stack_value: U = context.module()
 			.memory(ItemIndex::IndexSpace(DEFAULT_MEMORY_INDEX))
 			.and_then(|m| m.get(address, mem::size_of::<T>()))
@@ -524,7 +555,7 @@ impl<E> Interpreter<E> where E: UserError {
 			.value_stack_mut()
 			.pop_as::<T>()
 			.map(|n| n.into_little_endian())?;
-		let address = effective_address(offset, context.value_stack_mut().pop_as::<u32>()?)?;
+		let address = effective_address(offset, context.value_stack_mut().pop_as::<u32>()?, context)?;
 		context.module()
 			.memory(ItemIndex::IndexSpace(DEFAULT_MEMORY_INDEX))
 			.and_then(|m| m.set(address, &stack_value))
@@ -533,13 +564,15 @@ impl<E> Interpreter<E> where E: UserError {
 
 	fn run_store_wrap<'a, T, U>(context: &mut FunctionContext<E>, _align: u32, offset: u32) -> Result<InstructionOutcome<'a, E>, Error<E>>
 		where RuntimeValue: TryInto<T, Error<E>>, T: WrapInto<U>, U: LittleEndianConvert<E> {
-		let stack_value: T = context.value_stack_mut().pop().and_then(|v| v.try_into())?;
-		let stack_value = stack_value.wrap_into().into_little_endian();
-		let address = effective_address(offset, context.value_stack_mut().pop_as::<u32>()?)?;
-		context.module()
-			.memory(ItemIndex::IndexSpace(DEFAULT_MEMORY_INDEX))
-			.and_then(|m| m.set(address, &stack_value))
-			.map(|_| InstructionOutcome::RunNextInstruction)
+		{
+			let stack_value: T = context.value_stack_mut().pop().and_then(|v| v.try_into())?;
+			let stack_value = stack_value.wrap_into().into_little_endian();
+			let address = effective_address(offset, context.value_stack_mut().pop_as::<u32>()?, context)?;
+			context.module()
+				.memory(ItemIndex::IndexSpace(DEFAULT_MEMORY_INDEX))
+				.and_then(|m| m.set(address, &stack_value))
+				.map(|_| InstructionOutcome::RunNextInstruction)
+		}.map_err(|e| error_context(e, context))
 	}
 
 	fn run_current_memory<'a>(context: &mut FunctionContext<E>) -> Result<InstructionOutcome<'a, E>, Error<E>> {
@@ -1081,9 +1114,9 @@ impl<'a, E> fmt::Debug for FunctionContext<'a, E> where E: UserError {
 	}
 }
 
-fn effective_address<E: UserError>(address: u32, offset: u32) -> Result<u32, Error<E>> {
+fn effective_address<'a, E: UserError>(address: u32, offset: u32, context: &FunctionContext<'a, E>) -> Result<u32, Error<E>> {
 	match offset.checked_add(address) {
-		None => Err(Error::Memory(format!("invalid memory access: {} + {}", offset, address))),
+		None => Err(Error::Memory(format!("invalid memory access: {} + {}", offset, address), Some(FunctionDebugContext::from(context)))),
 		Some(address) => Ok(address),
 	}
 }
@@ -1101,4 +1134,11 @@ pub fn prepare_function_args<E: UserError>(function_type: &FunctionSignature, ca
 	}).collect::<Result<Vec<_>, _>>()?;
 	args.reverse();
 	Ok(args)
+}
+
+pub fn error_context<'a, E: UserError>(error: Error<E>, context: &'a FunctionContext<'a, E>) -> Error<E> {
+	match error {
+		Error::Memory(m, None) => Error::Memory(m, Some(FunctionDebugContext::from(context))),
+		a => a
+	}
 }

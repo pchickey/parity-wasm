@@ -1,5 +1,7 @@
 //! WebAssembly interpreter module.
 
+use self::runner::FunctionDebugContext;
+
 /// Custom user error.
 pub trait UserError: 'static + ::std::fmt::Display + ::std::fmt::Debug + Clone + PartialEq {
 }
@@ -18,7 +20,7 @@ pub enum Error<E> where E: UserError {
 	/// Table-level error.
 	Table(String),
 	/// Memory-level error.
-	Memory(String),
+	Memory(String, Option<FunctionDebugContext<E>>),
 	/// Variable-level error.
 	Variable(String),
 	/// Global-level error.
@@ -49,7 +51,7 @@ impl<E> Into<String> for Error<E> where E: UserError {
 			Error::Initialization(s) => s,
 			Error::Function(s) => s,
 			Error::Table(s) => s,
-			Error::Memory(s) => s,
+			Error::Memory(s, _) => s,
 			Error::Variable(s) => s,
 			Error::Global(s) => s,
 			Error::Local(s) => s,
@@ -72,7 +74,7 @@ impl<E> ::std::fmt::Display for Error<E> where E: UserError {
 			Error::Initialization(ref s) => write!(f, "Initialization: {}", s),
 			Error::Function(ref s) => write!(f, "Function: {}", s),
 			Error::Table(ref s) => write!(f, "Table: {}", s),
-			Error::Memory(ref s) => write!(f, "Memory: {}", s),
+			Error::Memory(ref s, _) => write!(f, "Memory: {}", s),
 			Error::Variable(ref s) => write!(f, "Variable: {}", s),
 			Error::Global(ref s) => write!(f, "Global: {}", s),
 			Error::Local(ref s) => write!(f, "Local: {}", s),
